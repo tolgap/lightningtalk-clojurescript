@@ -1,6 +1,8 @@
 (ns lightningtalk.core
+  (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [om.core :as om :include-macros true]
-            [sablono.core :as html :refer-macros [html]]))
+            [sablono.core :as html :refer-macros [html]]
+            [cljs.core.async :refer [put! <! chan]]))
 
 (enable-console-print!)
 
@@ -22,16 +24,34 @@
           [:input {:type "text" :ref "changer" :placeholder "Add a new title"}]
           [:button {:onClick #(change-title data owner)} "Add"]])))
 
-(defn title-component [data owner]
-  (om/component
-   (html [:li.title data])))
+(defn title-component [title owner]
+  (reify
+    om/IRenderState
+    (render-state [this {:keys [delete]}]
+      (html [:li.title
+             [:span title]
+             [:button {:onClick #(put! delete title)} "Delete"]]))))
 
 (defn index-component [data owner]
-  (om/component
-   (html [:div
-          [:ul
-           (om/build-all title-component (data :titles))]
-          (om/build changer-component data)])))
+  (reify
+    om/IInitState
+    (init-state [_]
+      {:delete (chan)})
+    om/IWillMount
+    (will-mount [_]
+      (let [delete (om/get-state owner :delete)]
+        (go (loop []
+          (let [title (<! delete)]
+            (om/transact! data :titles
+                          (fn [xs] (vec (remove #(= title %) xs))))
+            (recur))))))
+    om/IRenderState
+    (render-state [this {:keys [delete]}]
+      (html [:div
+             [:ul
+              (om/build-all title-component (data :titles)
+                            {:init-state {:delete delete}})]
+             (om/build changer-component data)]))))
 
 (om/root
  index-component
