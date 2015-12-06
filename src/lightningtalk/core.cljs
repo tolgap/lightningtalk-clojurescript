@@ -6,24 +6,31 @@
 
 (println "Edits to this text should show up in your developer console.")
 
-(defonce app-state (atom {:title "Hello world!"}))
+(defonce app-state (atom {:titles ["Hello world!"]}))
 
 (defn change-title [data owner]
   (let [new-title (-> (om/get-node owner "changer")
                       .-value)]
-    (when new-title
-      (om/update! data [:title] new-title))))
+    (when (not (empty? new-title))
+      (om/transact! data :titles #(conj % new-title)))))
+;; Same as:
+;; (om/transact! data :titles (fn [xs] (conj xs new-title)))
 
 (defn changer-component [data owner]
   (om/component
    (html [:div
-          [:input {:type "text" :ref "changer" :placeholder "Change the text"}]
-          [:button {:onClick #(change-title data owner)} "Apply"]])))
+          [:input {:type "text" :ref "changer" :placeholder "Add a new title"}]
+          [:button {:onClick #(change-title data owner)} "Add"]])))
+
+(defn title-component [data owner]
+  (om/component
+   (html [:li.title data])))
 
 (defn index-component [data owner]
   (om/component
    (html [:div
-          (data :title)
+          [:ul
+           (om/build-all title-component (data :titles))]
           (om/build changer-component data)])))
 
 (om/root
