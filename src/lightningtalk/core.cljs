@@ -8,10 +8,23 @@
 
 (defonce app-state (atom {:title "Hello world!"}))
 
+(defn change-title [data owner]
+  (let [new-title (-> (om/get-node owner "changer")
+                      .-value)]
+    (when new-title
+      (om/update! data [:title] new-title))))
+
+(defn changer-component [data owner]
+  (om/component
+   (html [:div
+          [:input {:type "text" :ref "changer" :placeholder "Change the text"}]
+          [:button {:onClick #(change-title data owner)} "Apply"]])))
+
 (defn index-component [data owner]
   (om/component
    (html [:div
-          (data :title)])))
+          (data :title)
+          (om/build changer-component data)])))
 
 (om/root
  index-component
