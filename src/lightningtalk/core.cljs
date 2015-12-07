@@ -1,22 +1,62 @@
 (ns lightningtalk.core
+  (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [om.core :as om :include-macros true]
-            [om.dom :as dom :include-macros true]))
+            [sablono.core :as html :refer-macros [html]]
+            [cljs.core.async :refer [put! <! chan]]))
 
 (enable-console-print!)
 
 (println "Edits to this text should show up in your developer console.")
 
-;; define your app data so that it doesn't get over-written on reload
+(defonce app-state (atom {:titles ["Hello world!"]}))
 
-(defonce app-state (atom {:text "Hello world!"}))
+(defn change-title [data owner]
+  (let [new-title (-> (om/get-node owner "changer")
+                      .-value)]
+    (when (not (empty? new-title))
+      (om/transact! data :titles #(conj % new-title)))))
+;; Same as:
+;; (om/transact! data :titles (fn [xs] (conj xs new-title)))
+
+(defn changer-component [data owner]
+  (om/component
+   (html [:div
+          [:input {:type "text" :ref "changer" :placeholder "Add a new title"}]
+          [:button {:onClick #(change-title data owner)} "Add"]])))
+
+(defn title-component [title owner]
+  (reify
+    om/IRenderState
+    (render-state [this {:keys [delete]}]
+      (html [:li.title
+             [:span title]
+             [:button {:onClick #(put! delete title)} "Delete"]]))))
+
+(defn index-component [data owner]
+  (reify
+    om/IInitState
+    (init-state [_]
+      {:delete (chan)})
+    om/IWillMount
+    (will-mount [_]
+      (let [delete (om/get-state owner :delete)]
+        (go (loop []
+          (let [title (<! delete)]
+            (om/transact! data :titles
+                          (fn [xs] (vec (remove #(= title %) xs))))
+            (recur))))))
+    om/IRenderState
+    (render-state [this {:keys [delete]}]
+      (html [:div
+             [:ul
+              (om/build-all title-component (data :titles)
+                            {:init-state {:delete delete}})]
+             (om/build changer-component data)]))))
 
 (om/root
-  (fn [data owner]
-    (reify om/IRender
-      (render [_]
-        (dom/h1 nil (:text data)))))
-  app-state
-  {:target (. js/document (getElementById "app"))})
+ index-component
+ app-state
+ {:target (. js/document (getElementById "app"))})
 
 
 (defn on-js-reload []
